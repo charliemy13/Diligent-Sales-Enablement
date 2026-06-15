@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Diligent — Demo Prep Agent</title>
+<style>
+  :root {
+    --red: #E3000F;
+    --charcoal: #1A1A1A;
+    --purple: #7B2D8B;
+    --grey-bg: #F5F5F5;
+    --border: #D5D5D5;
+    --muted: #6B6B6B;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--grey-bg);
+    color: var(--charcoal);
+    font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    padding: 32px 16px;
+    min-height: 100vh;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; }
+
+  /* Header */
+  header { display: flex; align-items: center; gap: 14px; margin-bottom: 28px; }
+  .brand-name { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; line-height: 1; }
+  .brand-tag { font-size: 13px; color: var(--muted); margin-top: 4px; }
+
+  /* Card */
+  .card {
+    background: #fff;
+    border-radius: 10px;
+    padding: 28px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+
+  /* Form */
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  label.field-label { display: block; font-size: 13px; font-weight: 600; color: var(--charcoal); margin-bottom: 6px; }
+  .opt { font-weight: 400; color: var(--muted); }
+  .req { color: var(--red); margin-left: 2px; }
+  input, select, textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 14px;
+    color: var(--charcoal);
+    font-family: inherit;
+    outline: none;
+  }
+  select { cursor: pointer; }
+  textarea { resize: vertical; line-height: 1.5; }
+  #transcript { min-height: 220px; }
+  #notes { min-height: 110px; }
+  input:focus, select:focus, textarea:focus { border-color: var(--charcoal); }
+  .field { margin-top: 18px; }
+  .err-msg { color: var(--red); font-size: 12px; margin-top: 4px; }
+
+  /* Buttons */
+  .btn-primary {
+    width: 100%; margin-top: 24px; padding: 14px;
+    background: var(--red); color: #fff; border: none; border-radius: 8px;
+    font-size: 15px; font-weight: 700; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+  }
+  .btn-primary:disabled { opacity: 0.85; cursor: default; }
+  .btn-outline {
+    margin-top: 18px; padding: 11px 22px;
+    background: #fff; color: var(--charcoal);
+    border: 1px solid var(--charcoal); border-radius: 8px;
+    font-size: 14px; font-weight: 600; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .btn-copy {
+    border: 1px solid var(--border); color: var(--charcoal);
+    background: #fff; border-radius: 6px; padding: 6px 14px;
+    font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  .btn-copy.copied { border-color: var(--red); color: var(--red); }
+
+  .api-error { color: var(--red); font-size: 13px; margin-top: 14px; font-weight: 500; }
+  .demo-banner {
+    background: #F3E9F5; border: 1px solid #E2C8E8; color: var(--purple);
+    font-size: 12.5px; font-weight: 600; border-radius: 6px;
+    padding: 10px 14px; margin-bottom: 22px;
+  }
+
+  /* Spinner */
+  .spin { animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Tabs */
+  .tabbar { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 2px solid #E5E5E5; }
+  .tab {
+    border: none; background: transparent; padding: 10px 16px;
+    font-size: 14px; font-weight: 500; color: var(--muted);
+    cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px;
+    font-family: inherit;
+  }
+  .tab.active { font-weight: 700; color: var(--red); border-bottom: 2px solid var(--red); }
+  .panel {
+    background: #fff; border-radius: 0 0 10px 10px; padding: 28px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+  .copy-row { display: flex; justify-content: flex-end; margin-bottom: 16px; }
+
+  /* Content typography */
+  h2.tab-title { font-size: 19px; font-weight: 700; margin: 0 0 4px; }
+  .tab-sub { color: var(--muted); font-size: 13px; margin: 0 0 22px; }
+  .section-label {
+    font-size: 12px; font-weight: 700; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--purple); margin-bottom: 8px;
+  }
+  .body-text { font-size: 14.5px; line-height: 1.65; color: var(--charcoal); white-space: pre-wrap; margin: 0; }
+  .field-block { margin-bottom: 22px; }
+  .accent-left { border-left: 3px solid var(--red); padding-left: 14px; }
+
+  .act-header { display: flex; align-items: baseline; gap: 10px; margin: 26px 0 12px; }
+  .act-num { color: var(--red); font-weight: 800; font-size: 15px; }
+  .act-title { font-weight: 700; font-size: 16px; }
+  .show-card { border: 1px solid #ECECEC; border-radius: 8px; padding: 16px; margin-bottom: 12px; background: #FBFBFB; }
+  .show-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .feature-name { font-weight: 700; font-size: 15px; }
+  .pain-pill { font-size: 11.5px; font-weight: 600; color: var(--purple); background: #F3E9F5; padding: 3px 9px; border-radius: 20px; }
+  .handle-q { font-weight: 700; font-size: 14.5px; margin-bottom: 4px; }
+  .handle-a { font-size: 14.5px; line-height: 1.65; color: #3A3A3A; margin: 0; }
+
+  /* Objection table */
+  .obj-table { border: 1px solid #ECECEC; border-radius: 8px; overflow: hidden; }
+  .obj-row { display: grid; grid-template-columns: 1fr 1.4fr; border-bottom: 1px solid #ECECEC; }
+  .obj-row:last-child { border-bottom: none; }
+  .obj-row:nth-child(even) { background: #FBFBFB; }
+  .obj-q { padding: 14px; font-weight: 600; font-size: 14px; border-right: 1px solid #ECECEC; }
+  .obj-a { padding: 14px; font-size: 14px; line-height: 1.6; color: #3A3A3A; }
+
+  .comp-pill { display: inline-block; background: #FDE7E8; color: var(--red); font-weight: 700; font-size: 13px; padding: 6px 14px; border-radius: 6px; margin-bottom: 18px; }
+  .comp-note { background: #FBFBFB; border: 1px solid #ECECEC; border-radius: 8px; padding: 16px; }
+  .verbal-close { background: var(--charcoal); color: #fff; padding: 18px; border-radius: 8px; font-size: 15.5px; font-style: italic; line-height: 1.65; white-space: pre-wrap; margin: 0; }
+
+  :focus-visible { outline: 2px solid var(--purple); outline-offset: 2px; }
+  ol, ul { margin: 0; padding-left: 20px; }
+
+  @media (max-width: 620px) {
+    .grid2 { grid-template-columns: 1fr; }
+    .obj-row { grid-template-columns: 1fr; }
+    .obj-q { border-right: none; border-bottom: 1px solid #ECECEC; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- Header -->
+  <header>
+    <svg width="40" height="40" viewBox="0 0 40 40" aria-label="Diligent logomark" role="img">
+      <path d="M4 4 H22 C32 4 38 11 38 20 C38 29 32 36 22 36 H4 Z" fill="#E3000F" />
+      <path d="M13 12 H21 C27 12 30 15.5 30 20 C30 24.5 27 28 21 28 H13 Z M19 17 V23 H21 C23.4 23 24.6 21.8 24.6 20 C24.6 18.2 23.4 17 21 17 Z" fill="#FFFFFF" />
+    </svg>
+    <div>
+      <div class="brand-name">Diligent</div>
+      <div class="brand-tag">Demo Prep Agent</div>
+    </div>
+  </header>
+
+  <!-- Form card -->
+  <div class="card">
+    <div class="demo-banner">
+      Demo mode — this static build returns realistic sample prep. To generate real prep from a Gong transcript, wire the marked stub in the code to your own backend that calls the Anthropic API.
+    </div>
+
+    <div class="grid2">
+      <div>
+        <label class="field-label" for="name">Prospect Name<span class="req">*</span></label>
+        <input id="name" type="text" />
+        <div class="err-msg" data-err="name" hidden>This field is required.</div>
+      </div>
+      <div>
+        <label class="field-label" for="title">Title<span class="req">*</span></label>
+        <input id="title" type="text" />
+        <div class="err-msg" data-err="title" hidden>This field is required.</div>
+      </div>
+      <div>
+        <label class="field-label" for="company">Company Name<span class="req">*</span></label>
+        <input id="company" type="text" />
+        <div class="err-msg" data-err="company" hidden>This field is required.</div>
+      </div>
+      <div>
+        <label class="field-label" for="website">Company Website<span class="req">*</span></label>
+        <input id="website" type="text" placeholder="https://..." />
+        <div class="err-msg" data-err="website" hidden>This field is required.</div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label class="field-label" for="trigger">Outreach Trigger<span class="req">*</span></label>
+      <select id="trigger">
+        <option value="" disabled selected>Select the original trigger...</option>
+        <option>Recent Funding</option>
+        <option>M&amp;A</option>
+        <option>Expansion</option>
+        <option>IPO</option>
+        <option>S1 Filing</option>
+        <option>New-to-Role / UserGem</option>
+        <option>Board Overlap</option>
+      </select>
+      <div class="err-msg" data-err="trigger" hidden>This field is required.</div>
+    </div>
+
+    <div class="field">
+      <label class="field-label" for="transcript">Discovery Call Transcript (from Gong)<span class="req">*</span></label>
+      <textarea id="transcript" placeholder="Paste the full Gong transcript here..."></textarea>
+      <div class="err-msg" data-err="transcript" hidden>This field is required.</div>
+    </div>
+
+    <div class="field">
+      <label class="field-label" for="notes">Additional Notes <span class="opt">(optional)</span></label>
+      <textarea id="notes" placeholder="Anyone new joining the demo, ZoomInfo context, recent news, anything else worth knowing..."></textarea>
+    </div>
+
+    <button id="build-btn" class="btn-primary">Build My Demo Prep</button>
+    <div id="api-error" class="api-error" hidden></div>
+  </div>
+
+  <!-- Output -->
+  <div id="output" style="margin-top:32px;" hidden>
+    <div class="tabbar" id="tabbar"></div>
+    <div class="panel">
+      <div class="copy-row">
+        <button class="btn-copy" id="copy-btn">Copy Tab</button>
+      </div>
+      <div id="panel-content"></div>
+    </div>
+    <button id="regen-btn" class="btn-outline">Regenerate</button>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var RED = "#E3000F", CHARCOAL = "#1A1A1A", PURPLE = "#7B2D8B";
+
+  var TABS = [
+    { id: "snapshot", label: "Prospect Snapshot" },
+    { id: "script", label: "Demo Script" },
+    { id: "objections", label: "Objection Cheat Sheet" },
+    { id: "competitive", label: "Competitive Intelligence" },
+    { id: "nextstep", label: "Recommended Next Step" }
+  ];
+
+  var REQUIRED = ["name", "title", "company", "website", "trigger", "transcript"];
+
+  var state = { result: null, activeTab: "snapshot", loading: false };
+
+  function $(id) { return document.getElementById(id); }
+  function esc(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  // ----------------------------------------------------------------------
+  // DEMO DATA GENERATOR
+  // ----------------------------------------------------------------------
+  // This replaces the live Anthropic API call. In the original artifact a
+  // client-side fetch() hit https://api.anthropic.com/v1/messages with a
+  // system prompt grounded in the Diligent product docs. GitHub Pages is
+  // static (no server, no secret storage) and the browser cannot safely
+  // hold an API key, so that call is replaced here with sample output.
+  //
+  // === TO CONNECT A REAL BACKEND ===
+  // Replace generateDemoData() below with a fetch() to YOUR OWN endpoint
+  // (e.g. a serverless function) that holds the key server-side and calls
+  // Anthropic. Have it return JSON matching the shape produced here.
+  // ----------------------------------------------------------------------
+  function generateDemoData(form) {
+    var name = form.name || "the prospect";
+    var company = form.company || "the company";
+    var title = form.title || "General Counsel";
+    var trigger = form.trigger || "Expansion";
+
+    return {
+      snapshot: {
+        company: company + " — likely mid-market enterprise; details inferred from " + (form.website || "their site") + " and the discovery call.",
+        trigger: trigger + " — this is what put " + company + " on the radar and signals heightened board scrutiny and new governance expectations.",
+        room: name + ", " + title + " (primary buyer from discovery). Confirm at the open whether anyone else from legal or governance is joining.",
+        painPoints: [
+          "\"Board prep eats up a day or two every cycle\" — manual board book assembly is draining the team.",
+          "\"We're still passing sensitive materials around over email\" — confidential board comms run through insecure channels.",
+          "\"I don't have a real-time read on where our risk actually sits\" — no holistic, current view of risk for the board."
+        ],
+        rapport: "Early in the call " + name + " mentioned the team is stretched thin heading into the next board cycle — open by acknowledging that pressure directly before showing anything."
+      },
+      script: {
+        open: "\"" + name + ", before I show you anything, I want to make sure I heard you right. You told me board prep is swallowing a day or two every cycle, that sensitive materials are still moving over email, and that you don't have a real-time picture of where your risk actually sits heading into a board meeting. Does that capture it? Because if it does, everything I show you in the next 20 minutes maps straight back to those three things — nothing else.\"",
+        show: [
+          { feature: "AI Smart Book Builder", pain: "Manual board book prep", talkTrack: "\"This is the piece that gives you back the day or two. Smart Book Builder synthesizes your documents, PDFs, spreadsheets and decks into an accurate, pre-formatted first draft of the board book — committee reports included. One of our customers, a GC and Corporate Secretary, put it plainly: he used to spend a day or two prepping, now it's an hour or two.\"" },
+          { feature: "Secure virtual data rooms & secure messaging", pain: "Insecure email comms", talkTrack: "\"This directly replaces email for board materials. Documents move through encrypted data rooms with granular permissions — your most confidential information protected at rest, in transit and in use. No more sensitive board packets sitting in inboxes.\"" },
+          { feature: "AI Smart Risk Scanner", pain: "No real-time risk visibility", talkTrack: "\"This is your real-time read on risk. Smart Risk Scanner proactively surfaces business risks buried in your board and committee materials and hands decision-makers a high-level summary — so you walk into the room already knowing where the exposure is.\"" },
+          { feature: "AI Smart Prep", pain: "Time-consuming, unfocused prep", talkTrack: "\"And this is what gets your directors arriving focused. Smart Prep surfaces the strategic insights, key topics and discussion prompts from the materials, so prep stops being a scramble and your board shows up ready for the conversation that matters.\"" }
+        ],
+        handle: [
+          { objection: "\"We've managed fine on our current process — why change now?\"", response: "\"That's fair — and the trigger here is exactly why this is the moment. " + trigger + " raises the bar on board scrutiny, and a manual, email-based process is precisely what gets exposed under that scrutiny. Diligent de-risks the prep and the distribution at the same time.\"" },
+          { objection: "\"Is our board data actually secure with you?\"", response: "\"Security is the foundation, not an add-on. Confidential data is protected at rest, in transit and in use, with granular permissions — and GovernAI is purpose-built for governance under the highest security standards and responsible-AI principles, not a general-purpose assistant.\"" },
+          { objection: "\"Will our directors actually adopt this?\"", response: "\"That's the most common concern, and it's why the experience is built for directors, not just admins — a clean, secure place to read materials, and AI that hands them concise prep instead of a 200-page packet. Adoption tends to follow because it saves them time too.\"" },
+          { objection: "\"How much of my team's time does rollout take?\"", response: "\"Less than you'd expect — it integrates with the tools you already use, like Office 365, Google Drive and DocuSign, so it slots into existing workflows rather than replacing them. And the AI front-loads the heavy lifting from day one.\"" },
+          { objection: "\"We're not sure AI belongs anywhere near board materials.\"", response: "\"Completely reasonable for a governance function. GovernAI was developed with decades of governance expertise for greater precision than mainstream AI, it always produces a first draft for you to review and control, and it ships with AI-oversight and responsible-use templates so you stay compliant.\"" }
+        ],
+        close: "\"" + name + ", you told me the next board cycle is bearing down and the team's already stretched. So here's what I'd suggest: rather than another generic overview, let's get your actual materials into a scoped pilot before that cycle, and bring in whoever signs off on tooling on your side. If Smart Book Builder turns your next prep from two days into two hours, that's the proof point — not my slides. Want me to set that up?\""
+      },
+      objections: [
+        { objection: "\"We've managed fine on our current process — why change now?\"", response: "The " + trigger + " trigger raises board scrutiny; a manual, email-based process is exactly what gets exposed. Diligent de-risks prep and distribution together." },
+        { objection: "\"Is our board data actually secure?\"", response: "Confidential data protected at rest, in transit and in use, with granular permissions. GovernAI is purpose-built for governance under the highest security standards." },
+        { objection: "\"Will our directors adopt this?\"", response: "Built for directors, not just admins — clean secure reading plus AI-generated concise prep instead of a 200-page packet. Adoption follows the time saved." },
+        { objection: "\"How much time does rollout take?\"", response: "Integrates with Office 365, Google Drive and DocuSign, so it slots into existing workflows. The AI front-loads the heavy lifting from day one." },
+        { objection: "\"Does AI belong near board materials?\"", response: "GovernAI is governance-built for precision, always produces a reviewable first draft you control, and ships with AI-oversight and responsible-use templates." },
+        { objection: "\"What's the ROI versus what we pay now?\"", response: "Anchor on the prep-time quote — a day or two down to an hour or two per cycle — plus the cost of a single security incident or compliance miss avoided." },
+        { objection: "\"We already use [point tools] for pieces of this.\"", response: "Those are fragments. Diligent unifies meeting management, secure collaboration, minutes, risk and reporting on one platform — fewer gaps, one source of truth." },
+        { objection: "\"Can you handle multiple boards / committees / subsidiaries?\"", response: "Yes — Smart Book Builder generates committee, audit, cyber, risk and subsidiary board materials, and the platform scales across boards and committees." }
+      ],
+      competitive: {
+        competitorFound: false,
+        competitor: "",
+        points: [],
+        note: "No competitor was identified in the transcript or notes. Ask directly during the demo — e.g. \"Are you evaluating this alongside any other board management tools?\" If they name one (AuditBoard, Nasdaq Boardvantage, Aprio, Govenda, BoardEffect), pivot to Diligent's strengths: purpose-built governance AI, best-in-class security, and a single unified platform across governance, risk and reporting."
+      },
+      nextStep: {
+        recommendation: "Given " + name + "'s stated pressure heading into the next board cycle, recommend a scoped pilot using " + company + "'s real materials before that cycle — and explicitly involve whoever owns the tooling decision on their side. Tie the success metric to the prep-time reduction (a day or two down to an hour or two) so the pilot proves itself on their own data.",
+        verbalClose: "\"Let's get your actual board materials into a scoped pilot before your next cycle, with your tooling decision-maker in the room — if it turns two days of prep into two hours, you'll have your answer.\""
+      }
+    };
+  }
+
+  // ----------------------------------------------------------------------
+  // Form handling
+  // ----------------------------------------------------------------------
+  function readForm() {
+    return {
+      name: $("name").value,
+      title: $("title").value,
+      company: $("company").value,
+      website: $("website").value,
+      trigger: $("trigger").value,
+      transcript: $("transcript").value,
+      notes: $("notes").value
+    };
+  }
+
+  function validate(form) {
+    var ok = true;
+    REQUIRED.forEach(function (k) {
+      var errEl = document.querySelector('[data-err="' + k + '"]');
+      if (!form[k] || !form[k].trim()) {
+        errEl.hidden = false;
+        ok = false;
+      } else {
+        errEl.hidden = true;
+      }
+    });
+    return ok;
+  }
+
+  function setLoading(on) {
+    state.loading = on;
+    var btn = $("build-btn");
+    var regen = $("regen-btn");
+    if (on) {
+      btn.disabled = true;
+      btn.innerHTML = spinnerSvg("#fff", "rgba(255,255,255,0.35)") + " Preparing your demo...";
+      if (regen) { regen.disabled = true; }
+    } else {
+      btn.disabled = false;
+      btn.textContent = "Build My Demo Prep";
+      if (regen) { regen.disabled = false; regen.innerHTML = "Regenerate"; }
+    }
+  }
+
+  function spinnerSvg(stroke, track) {
+    return '<svg class="spin" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">' +
+      '<circle cx="12" cy="12" r="9" fill="none" stroke="' + track + '" stroke-width="3"/>' +
+      '<path d="M12 3 a9 9 0 0 1 9 9" fill="none" stroke="' + stroke + '" stroke-width="3" stroke-linecap="round"/></svg>';
+  }
+
+  function build() {
+    var form = readForm();
+    if (!validate(form)) return;
+    $("api-error").hidden = true;
+    setLoading(true);
+
+    // Simulated async to mirror the original API latency / loading state.
+    setTimeout(function () {
+      try {
+        state.result = generateDemoData(form);
+        state.activeTab = "snapshot";
+        renderOutput();
+        $("output").hidden = false;
+        $("output").scrollIntoView({ behavior: "smooth" });
+      } catch (e) {
+        var err = $("api-error");
+        err.hidden = false;
+        err.textContent = "Couldn't build the prep — try again.";
+      } finally {
+        setLoading(false);
+      }
+    }, 900);
+  }
+
+  // ----------------------------------------------------------------------
+  // Rendering
+  // ----------------------------------------------------------------------
+  function renderTabbar() {
+    var bar = $("tabbar");
+    bar.innerHTML = "";
+    TABS.forEach(function (t) {
+      var b = document.createElement("button");
+      b.className = "tab" + (state.activeTab === t.id ? " active" : "");
+      b.textContent = t.label;
+      b.onclick = function () { state.activeTab = t.id; renderOutput(); };
+      bar.appendChild(b);
+    });
+  }
+
+  function renderOutput() {
+    if (!state.result) return;
+    renderTabbar();
+    var c = $("panel-content");
+    var r = state.result;
+    var id = state.activeTab;
+    if (id === "snapshot") c.innerHTML = viewSnapshot(r.snapshot);
+    else if (id === "script") c.innerHTML = viewScript(r.script);
+    else if (id === "objections") c.innerHTML = viewObjections(r.objections);
+    else if (id === "competitive") c.innerHTML = viewCompetitive(r.competitive);
+    else if (id === "nextstep") c.innerHTML = viewNextStep(r.nextStep);
+
+    // reset copy button label
+    var cb = $("copy-btn");
+    cb.textContent = "Copy Tab";
+    cb.className = "btn-copy";
+  }
+
+  function fieldBlock(label, inner) {
+    return '<div class="field-block"><div class="section-label">' + esc(label) + '</div>' + inner + '</div>';
+  }
+
+  function viewSnapshot(d) {
+    d = d || {};
+    var pains = (d.painPoints || []).map(function (p) {
+      return '<li class="body-text" style="margin-bottom:8px;">' + esc(p) + '</li>';
+    }).join("");
+    return '<h2 class="tab-title">Know before you walk in</h2>' +
+      '<p class="tab-sub">Your pre-demo brief for this prospect.</p>' +
+      fieldBlock("Company", '<p class="body-text">' + esc(d.company) + '</p>') +
+      fieldBlock("Original Outreach Trigger", '<p class="body-text">' + esc(d.trigger) + '</p>') +
+      fieldBlock("In the Room", '<p class="body-text">' + esc(d.room) + '</p>') +
+      fieldBlock("Top 3 Pain Points (their words)", '<ol>' + pains + '</ol>') +
+      fieldBlock("Rapport-Building Detail", '<p class="body-text accent-left">' + esc(d.rapport) + '</p>');
+  }
+
+  function actHeader(n, title) {
+    return '<div class="act-header"><span class="act-num">ACT ' + n + '</span><span class="act-title">' + esc(title) + '</span></div>';
+  }
+
+  function viewScript(d) {
+    d = d || {};
+    var show = (d.show || []).map(function (x) {
+      return '<div class="show-card"><div class="show-head">' +
+        '<span class="feature-name">' + esc(x.feature) + '</span>' +
+        '<span class="pain-pill">' + esc(x.pain) + '</span></div>' +
+        '<p class="body-text">' + esc(x.talkTrack) + '</p></div>';
+    }).join("");
+    var handle = (d.handle || []).map(function (x) {
+      return '<div style="margin-bottom:14px;"><div class="handle-q">' + esc(x.objection) + '</div>' +
+        '<p class="handle-a">' + esc(x.response) + '</p></div>';
+    }).join("");
+    return '<h2 class="tab-title">Demo Script</h2>' +
+      '<p class="tab-sub">Your four-act talk track. What to say — not what to click.</p>' +
+      actHeader("1", "Open — Make them feel heard") +
+      '<p class="body-text">' + esc(d.open) + '</p>' +
+      actHeader("2", "Show — 4 capabilities, mapped to their pains") + show +
+      actHeader("3", "Handle — Objections they'll likely raise") + handle +
+      actHeader("4", "Close — Land it in the final 5 minutes") +
+      '<p class="body-text accent-left">' + esc(d.close) + '</p>';
+  }
+
+  function viewObjections(list) {
+    list = list || [];
+    var rows = list.map(function (o) {
+      return '<div class="obj-row"><div class="obj-q">' + esc(o.objection) + '</div>' +
+        '<div class="obj-a">' + esc(o.response) + '</div></div>';
+    }).join("");
+    return '<h2 class="tab-title">Objection Cheat Sheet</h2>' +
+      '<p class="tab-sub">Scannable mid-demo if they go off script.</p>' +
+      '<div class="obj-table">' + rows + '</div>';
+  }
+
+  function viewCompetitive(d) {
+    d = d || {};
+    if (d.competitorFound) {
+      var pts = (d.points || []).map(function (p) {
+        return '<li class="body-text" style="margin-bottom:12px;">' + esc(p) + '</li>';
+      }).join("");
+      return '<h2 class="tab-title">Competitive Intelligence</h2>' +
+        '<p class="tab-sub">A competitor surfaced in discovery.</p>' +
+        '<div class="comp-pill">Evaluating / using: ' + esc(d.competitor) + '</div>' +
+        '<ul>' + pts + '</ul>';
+    }
+    return '<h2 class="tab-title">Competitive Intelligence</h2>' +
+      '<p class="tab-sub">Where Diligent stands against alternatives.</p>' +
+      '<p class="body-text comp-note">' + esc(d.note) + '</p>';
+  }
+
+  function viewNextStep(d) {
+    d = d || {};
+    return '<h2 class="tab-title">Recommended Next Step</h2>' +
+      '<p class="tab-sub">A precise close for this prospect.</p>' +
+      fieldBlock("The Recommendation", '<p class="body-text">' + esc(d.recommendation) + '</p>') +
+      fieldBlock("Suggested Verbal Close", '<p class="verbal-close">\u201C' + esc(d.verbalClose) + '\u201D</p>');
+  }
+
+  // ----------------------------------------------------------------------
+  // Copy-to-clipboard (plain-text serializer per tab)
+  // ----------------------------------------------------------------------
+  function tabText(id) {
+    var r = state.result;
+    if (!r) return "";
+    if (id === "snapshot") {
+      var s = r.snapshot || {};
+      return ["PROSPECT SNAPSHOT",
+        "Company: " + (s.company || ""),
+        "Trigger: " + (s.trigger || ""),
+        "In the room: " + (s.room || ""),
+        "Top pain points:"]
+        .concat((s.painPoints || []).map(function (p, i) { return "  " + (i + 1) + ". " + p; }))
+        .concat(["Rapport detail: " + (s.rapport || "")]).join("\n");
+    }
+    if (id === "script") {
+      var sc = r.script || {};
+      return ["DEMO SCRIPT", "", "ACT 1 — OPEN", sc.open || "", "", "ACT 2 — SHOW"]
+        .concat((sc.show || []).map(function (x) { return "• " + x.feature + " (maps to: " + x.pain + ")\n  " + x.talkTrack; }))
+        .concat(["", "ACT 3 — HANDLE"])
+        .concat((sc.handle || []).map(function (x) { return "• " + x.objection + "\n  → " + x.response; }))
+        .concat(["", "ACT 4 — CLOSE", sc.close || ""]).join("\n");
+    }
+    if (id === "objections") {
+      return ["OBJECTION CHEAT SHEET"]
+        .concat((r.objections || []).map(function (o) { return o.objection + "\n→ " + o.response + "\n"; })).join("\n");
+    }
+    if (id === "competitive") {
+      var c = r.competitive || {};
+      if (!c.competitorFound) return "COMPETITIVE INTELLIGENCE\n" + (c.note || "");
+      return ["COMPETITIVE INTELLIGENCE", "Competitor: " + (c.competitor || "")]
+        .concat((c.points || []).map(function (p) { return "• " + p; })).join("\n");
+    }
+    if (id === "nextstep") {
+      var n = r.nextStep || {};
+      return ["RECOMMENDED NEXT STEP", n.recommendation || "", "", "Verbal close: " + (n.verbalClose || "")].join("\n");
+    }
+    return "";
+  }
+
+  function copyTab() {
+    var text = tabText(state.activeTab);
+    var cb = $("copy-btn");
+    function done() {
+      cb.textContent = "Copied!";
+      cb.className = "btn-copy copied";
+      setTimeout(function () { cb.textContent = "Copy Tab"; cb.className = "btn-copy"; }, 2000);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, fallback);
+    } else { fallback(); }
+    function fallback() {
+      var ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand("copy"); } catch (e) {}
+      document.body.removeChild(ta);
+      done();
+    }
+  }
+
+  // ----------------------------------------------------------------------
+  // Wire up
+  // ----------------------------------------------------------------------
+  $("build-btn").addEventListener("click", build);
+  $("regen-btn").addEventListener("click", build);
+  $("copy-btn").addEventListener("click", copyTab);
+})();
+</script>
+</body>
+</html>
