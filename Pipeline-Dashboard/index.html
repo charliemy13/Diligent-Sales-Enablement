@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Diligent — Pipeline Health Dashboard</title>
+<!-- PapaParse for robust CSV parsing (only external dependency; no build step) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+  :root {
+    --red: #E3000F;
+    --charcoal: #1A1A1A;
+    --purple: #7B2D8B;
+    --green: #22C55E;
+    --amber: #F59E0B;
+    --grey-bg: #F5F5F5;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: var(--charcoal);
+    background: var(--grey-bg);
+    min-height: 100vh;
+  }
+  button { font-family: inherit; }
+  input, select, textarea { font-family: inherit; }
+
+  /* ---------- Empty state ---------- */
+  #empty-screen {
+    min-height: 100vh;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 24px;
+  }
+  .empty-card {
+    background: #fff; border-radius: 10px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    padding: 40px 44px; max-width: 540px; width: 100%;
+    text-align: center;
+  }
+  .empty-card h1 { font-size: 24px; font-weight: 700; margin: 16px 0 6px; }
+  .empty-sub { color: #6B7280; font-size: 14px; margin-bottom: 28px; }
+  .empty-card p { font-size: 14px; color: #4B5563; line-height: 1.5; margin-bottom: 24px; }
+
+  .btn-primary {
+    background: var(--red); color: #fff; border: none; border-radius: 6px;
+    padding: 12px 28px; font-size: 15px; font-weight: 600; cursor: pointer;
+  }
+  .btn-primary:hover { background: #c40010; }
+  .btn-dark {
+    background: var(--charcoal); color: #fff; border: none; border-radius: 6px;
+    padding: 9px 20px; font-size: 14px; font-weight: 600; cursor: pointer;
+  }
+  .btn-link {
+    background: none; border: none; color: var(--purple);
+    font-size: 13px; cursor: pointer; font-weight: 500;
+  }
+  .btn-outline {
+    background: none; border: 1px solid #D1D5DB; border-radius: 6px;
+    padding: 8px 16px; font-size: 13px; font-weight: 500; color: var(--charcoal); cursor: pointer;
+  }
+  .btn-outline:hover { background: #FAFAFA; }
+
+  .paste-area {
+    width: 100%; min-height: 120px; border: 1px solid #D1D5DB; border-radius: 6px;
+    padding: 10px; font-size: 12px; font-family: monospace; resize: vertical;
+  }
+  .error-box {
+    margin-top: 20px; background: #FEF2F2; border: 1px solid var(--red);
+    color: var(--red); border-radius: 6px; padding: 10px 14px; font-size: 13px; text-align: left;
+  }
+
+  /* ---------- Header ---------- */
+  header {
+    background: #fff; border-bottom: 1px solid #E5E7EB; padding: 16px 28px;
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 12px;
+  }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand .name { font-size: 20px; font-weight: 700; line-height: 1; }
+  .brand .tag { font-size: 12px; color: #6B7280; margin-top: 2px; }
+
+  main { padding: 24px 28px; max-width: 1240px; margin: 0 auto; }
+
+  /* ---------- Metric cards ---------- */
+  .metric-row { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 28px; }
+  .metric-card {
+    background: #fff; border-top: 3px solid var(--red); border-radius: 6px;
+    padding: 18px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); flex: 1; min-width: 180px;
+  }
+  .metric-card .label { font-size: 12px; color: #6B7280; font-weight: 500; letter-spacing: .2px; }
+  .metric-card .value { font-size: 26px; font-weight: 700; color: var(--charcoal); margin-top: 6px; line-height: 1.1; }
+  .metric-card .sub { font-size: 12px; color: #9CA3AF; margin-top: 4px; }
+
+  /* ---------- Panels / cards ---------- */
+  .card {
+    background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    margin-bottom: 28px; overflow: hidden;
+  }
+  .panel-toggle {
+    width: 100%; background: none; border: none; padding: 14px 20px;
+    display: flex; align-items: center; justify-content: space-between;
+    cursor: pointer; font-size: 15px; font-weight: 600; color: var(--charcoal);
+  }
+  .panel-toggle .muted { font-weight: 400; color: #9CA3AF; font-size: 13px; margin-left: 8px; }
+  .panel-toggle .chev { color: var(--purple); }
+  .panel-body { padding: 0 20px 20px; }
+  .bench-box { background: var(--grey-bg); border-radius: 6px; padding: 14px 16px; margin-bottom: 18px; }
+  .bench-box .heading { font-size: 12px; font-weight: 600; margin-bottom: 10px; }
+  .bench-grid { display: flex; gap: 16px; flex-wrap: wrap; }
+  .bench-grid label { font-size: 12px; color: #4B5563; }
+  .bench-grid label > div { margin-bottom: 4px; }
+  .bench-grid input {
+    width: 64px; padding: 5px 8px; border: 1px solid #D1D5DB; border-radius: 4px; font-size: 13px;
+  }
+
+  h2.section-title { font-size: 16px; font-weight: 700; color: var(--charcoal); margin: 0 0 12px; letter-spacing: .2px; }
+
+  /* ---------- Tables ---------- */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  thead tr { background: #FAFAFA; }
+  th {
+    padding: 10px 12px; text-align: left; font-size: 11px; font-weight: 600;
+    color: #6B7280; text-transform: uppercase; letter-spacing: .4px; white-space: nowrap; user-select: none;
+  }
+  th.sortable { cursor: pointer; }
+  th.sortable:hover { color: var(--charcoal); }
+  td { padding: 11px 12px; font-size: 13px; color: var(--charcoal); border-top: 1px solid #F0F0F0; white-space: nowrap; }
+  td.deal-name { font-weight: 600; }
+
+  .badge {
+    display: inline-block; min-width: 34px; text-align: center; padding: 2px 8px;
+    border-radius: 4px; color: #fff; font-weight: 600; font-size: 13px;
+  }
+  .partial-tag { color: var(--amber); margin-left: 6px; font-size: 11px; font-weight: 500; cursor: help; }
+  .flag-yes { color: var(--red); font-weight: 600; display: inline-flex; align-items: center; gap: 4px; }
+  .flag-no, .dash { color: #9CA3AF; }
+
+  /* ---------- Stage chart ---------- */
+  .chart-card { padding: 20px; }
+  .chart-row { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+  .chart-row:last-child { margin-bottom: 0; }
+  .chart-label { width: 110px; font-size: 13px; color: var(--charcoal); flex-shrink: 0; text-align: right; }
+  .chart-bar-track { flex: 1; position: relative; height: 26px; }
+  .chart-bar {
+    height: 26px; border-radius: 0 4px 4px 0; display: flex; align-items: center;
+    min-width: 2px; transition: width .2s;
+  }
+  .chart-count { font-size: 12px; color: var(--charcoal); font-weight: 600; margin-left: 8px; white-space: nowrap; }
+  .chart-detail { font-size: 11px; color: #9CA3AF; margin-top: 3px; }
+  .chart-legend {
+    display: flex; gap: 20px; padding-top: 16px; margin-top: 16px;
+    border-top: 1px solid #F0F0F0; font-size: 12px; color: #6B7280; flex-wrap: wrap;
+  }
+  .legend-item { display: inline-flex; align-items: center; gap: 6px; }
+  .legend-swatch { width: 12px; height: 12px; border-radius: 2px; }
+
+  /* ---------- At-risk ---------- */
+  .risk-header { background: var(--red); color: #fff; padding: 12px 20px; font-size: 16px; font-weight: 700; }
+  .risk-item { padding: 16px 20px; border-top: 1px solid #F0F0F0; }
+  .risk-item:first-of-type { border-top: none; }
+  .risk-top { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; }
+  .risk-name { font-weight: 700; font-size: 15px; }
+  .risk-meta { font-weight: 400; color: #6B7280; font-size: 13px; margin-left: 10px; }
+  .risk-why { font-size: 13px; color: var(--red); margin-top: 8px; font-weight: 500; }
+  .risk-why span { color: #4B5563; font-weight: 400; }
+  .risk-action { font-size: 13px; color: var(--charcoal); margin-top: 6px; line-height: 1.5; }
+  .risk-action b { font-weight: 600; }
+  .empty-note { padding: 24px; color: #6B7280; font-size: 14px; }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<!-- ============================ EMPTY STATE ============================ -->
+<div id="empty-screen">
+  <div class="empty-card">
+    <div style="display:flex;justify-content:center;">
+      <!-- logomark injected by JS -->
+      <span id="empty-logo"></span>
+    </div>
+    <h1>Diligent</h1>
+    <div class="empty-sub">Pipeline Health Dashboard</div>
+    <p>Upload your Salesforce opportunity export to score every deal, flag what's at risk, and see where to focus this week.</p>
+
+    <button class="btn-primary" style="width:100%;" id="upload-btn">Upload CSV</button>
+    <input type="file" id="file-input" accept=".csv,text/csv" class="hidden" />
+
+    <button class="btn-link" id="paste-toggle" style="margin-top:16px;">or paste CSV text instead</button>
+
+    <div id="paste-block" class="hidden" style="margin-top:16px;text-align:left;">
+      <textarea id="paste-text" class="paste-area" placeholder="Paste raw CSV here, including the header row…"></textarea>
+      <button class="btn-dark" id="paste-load" style="margin-top:10px;">Load pasted CSV</button>
+    </div>
+
+    <div id="empty-error" class="error-box hidden"></div>
+  </div>
+</div>
+
+<!-- ============================ DASHBOARD ============================ -->
+<div id="dashboard" class="hidden">
+  <header>
+    <div class="brand">
+      <span id="header-logo"></span>
+      <div>
+        <div class="name">Diligent</div>
+        <div class="tag">Pipeline Health Dashboard</div>
+      </div>
+    </div>
+    <button class="btn-outline" id="reset-btn">Load new export</button>
+  </header>
+
+  <main>
+    <!-- Section 1: Summary -->
+    <div class="metric-row" id="metric-row"></div>
+
+    <!-- Score Inputs panel -->
+    <div class="card">
+      <button class="panel-toggle" id="panel-toggle">
+        <span>Score Inputs<span class="muted">stakeholders, objections &amp; stage benchmarks</span></span>
+        <span class="chev" id="panel-chev">Edit ▼</span>
+      </button>
+      <div class="panel-body hidden" id="panel-body">
+        <div class="bench-box">
+          <div class="heading">Average days per stage (your benchmarks)</div>
+          <div class="bench-grid" id="bench-grid"></div>
+        </div>
+        <div class="table-wrap">
+          <table id="manual-table">
+            <thead>
+              <tr><th>Deal</th><th>Stakeholders engaged</th><th>Objections logged</th></tr>
+            </thead>
+            <tbody id="manual-tbody"></tbody>
+          </table>
+        </div>
+        <button class="btn-primary" id="update-scores" style="margin-top:16px;padding:10px 24px;font-size:14px;">Update Scores</button>
+      </div>
+    </div>
+
+    <!-- Section 2: Pipeline by stage -->
+    <h2 class="section-title">Pipeline by stage</h2>
+    <div class="card chart-card" id="chart-card"></div>
+
+    <!-- Section 3: Deal scoring table -->
+    <h2 class="section-title">Deal scoring</h2>
+    <div class="card table-wrap">
+      <table id="score-table" style="min-width:880px;">
+        <thead><tr id="score-head"></tr></thead>
+        <tbody id="score-tbody"></tbody>
+      </table>
+    </div>
+
+    <!-- Section 4: Top 5 at-risk -->
+    <div class="card">
+      <div class="risk-header">At-risk deals — focus here this week</div>
+      <div id="risk-body"></div>
+    </div>
+
+    <!-- Section 5: Closing within 30 days -->
+    <h2 class="section-title">Closing within 30 days</h2>
+    <div class="card table-wrap" id="closing-card"></div>
+  </main>
+</div>
+
+<script>
+"use strict";
+
+/* ================================================================ */
+/*  Brand tokens                                                    */
+/* ================================================================ */
+var RED = "#E3000F", CHARCOAL = "#1A1A1A", PURPLE = "#7B2D8B",
+    GREEN = "#22C55E", AMBER = "#F59E0B";
+
+/* ================================================================ */
+/*  Helpers                                                         */
+/* ================================================================ */
+var MS_DAY = 86400000;
+var DASH = "\u2014";
+
+function today() { var d = new Date(); d.setHours(0,0,0,0); return d; }
+function parseDate(val) {
+  if (val === undefined || val === null) return null;
+  var s = String(val).trim(); if (!s) return null;
+  var d = new Date(s); return isNaN(d.getTime()) ? null : d;
+}
+function daysBetween(from, to) { if (!from || !to) return null; return Math.round((to.getTime() - from.getTime()) / MS_DAY); }
+function daysFromToday(d) { return d ? daysBetween(today(), d) : null; }
+function daysAgo(d) { return d ? daysBetween(d, today()) : null; }
+
+function fmtMoney(n) {
+  if (n === null || n === undefined || isNaN(n)) return DASH;
+  return n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+}
+function fmtDate(d) {
+  return d ? d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : DASH;
+}
+function esc(s) {
+  if (s === null || s === undefined) return "";
+  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+/* Header -> canonical field mapping */
+var FIELD_MAP = [
+  ["name", ["opportunity","deal name","deal","opportunity name","name","opportunity/deal name"]],
+  ["stage", ["stage"]],
+  ["closeDate", ["close date","closedate","close"]],
+  ["daysInStage", ["days in current stage","days in stage","daysinstage","days in current"]],
+  ["lastActivity", ["last activity date","last activity","lastactivity"]],
+  ["amount", ["amount","value","amount/value","deal value","amount (value)"]],
+  ["contactName", ["contact name","contact","primary contact"]],
+  ["contactTitle", ["contact title","title","contact name and title"]],
+  ["notes", ["notes","next steps","notes or next steps","next step"]]
+];
+function canonicalKey(header) {
+  var h = String(header || "").trim().toLowerCase();
+  for (var i = 0; i < FIELD_MAP.length; i++) {
+    if (FIELD_MAP[i][1].indexOf(h) !== -1) return FIELD_MAP[i][0];
+  }
+  return null;
+}
+function parseAmount(val) {
+  if (val === undefined || val === null) return null;
+  var cleaned = String(val).replace(/[$,\s]/g, "");
+  if (cleaned === "") return null;
+  var n = Number(cleaned); return isNaN(n) ? null : n;
+}
+
+var DEFAULT_BENCHMARKS = { Prospecting: 14, Discovery: 21, Demo: 14, Negotiation: 30 };
+
+/* ================================================================ */
+/*  Scoring                                                         */
+/* ================================================================ */
+var WEIGHTS = { stageSignal: 0.30, activitySignal: 0.25, stakeholderSignal: 0.25, objectionSignal: 0.20 };
+var SIGNAL_LABEL = { stageSignal: "days in stage", activitySignal: "last activity", stakeholderSignal: "stakeholders", objectionSignal: "objections" };
+
+function computeSignals(deal, benchmarks) {
+  var bench = (benchmarks[deal.stage] !== undefined) ? benchmarks[deal.stage] : null;
+
+  // 1. Days in stage vs benchmark
+  var stageSignal = null;
+  if (deal.daysInStage !== null && bench) {
+    if (deal.daysInStage <= bench) stageSignal = 1;
+    else {
+      var overPct = (deal.daysInStage - bench) / bench;
+      stageSignal = Math.max(0, 1 - overPct);
+    }
+  }
+
+  // 2. Last meaningful activity
+  var activitySignal = null;
+  var ago = daysAgo(deal.lastActivityDate);
+  if (ago !== null) {
+    if (ago <= 7) activitySignal = 1;
+    else if (ago <= 14) activitySignal = 0.6;
+    else if (ago <= 21) activitySignal = 0.3;
+    else activitySignal = 0.1;
+  }
+
+  // 3. Stakeholders engaged
+  var stakeholderSignal = null;
+  if (deal.stakeholders !== null && deal.stakeholders !== undefined) {
+    var s = deal.stakeholders;
+    if (s >= 3) stakeholderSignal = 1;
+    else if (s === 2) stakeholderSignal = 0.6;
+    else if (s === 1) stakeholderSignal = 0.3;
+    else stakeholderSignal = 0.1;
+  }
+
+  // 4. Objections logged — sweet spot 1-2
+  var objectionSignal = null;
+  if (deal.objections !== null && deal.objections !== undefined) {
+    var o = deal.objections;
+    if (o === 1 || o === 2) objectionSignal = 1;
+    else if (o === 0) objectionSignal = 0.5;
+    else objectionSignal = 0.3;
+  }
+
+  return { stageSignal: stageSignal, activitySignal: activitySignal,
+           stakeholderSignal: stakeholderSignal, objectionSignal: objectionSignal };
+}
+
+function scoreDeal(deal, benchmarks) {
+  var signals = computeSignals(deal, benchmarks);
+  var weighted = 0, totalWeight = 0, missing = [];
+  for (var key in WEIGHTS) {
+    var val = signals[key];
+    if (val === null || val === undefined) missing.push(key);
+    else { weighted += val * WEIGHTS[key]; totalWeight += WEIGHTS[key]; }
+  }
+  var score = null;
+  if (totalWeight > 0) score = Math.round((weighted / totalWeight) * 10 * 10) / 10;
+  return { score: score, signals: signals, missing: missing, partial: missing.length > 0 };
+}
+
+/* ================================================================ */
+/*  At-risk evaluation                                              */
+/* ================================================================ */
+function evaluateRisk(deal, benchmarks) {
+  var reasons = [];
+  var close = daysFromToday(deal.closeDate);
+  var ago = daysAgo(deal.lastActivityDate);
+  var bench = (benchmarks[deal.stage] !== undefined) ? benchmarks[deal.stage] : null;
+
+  if (close !== null && close >= 0 && close <= 45 && deal.score !== null && deal.score < 6)
+    reasons.push("closing in " + close + " day" + (close === 1 ? "" : "s") + " with a score of " + deal.score);
+  if (deal.daysInStage !== null && bench && deal.daysInStage > bench * 1.5)
+    reasons.push(deal.daysInStage + " days in " + deal.stage + " \u2014 over 150% of your " + bench + "-day benchmark");
+  if (ago !== null && ago > 21)
+    reasons.push("no activity in " + ago + " days");
+  if (deal.stakeholders === 0 && close !== null && close >= 0 && close <= 60)
+    reasons.push("only one stakeholder engaged with a close date " + close + " days out");
+
+  return { atRisk: reasons.length > 0, reasons: reasons };
+}
+
+/* ================================================================ */
+/*  Rule-based "this week's action" recommendation                  */
+/*  NOTE: This is a deterministic, client-side engine. It reads each */
+/*  deal's real data and produces a tailored next step. No API call. */
+/* ================================================================ */
+function recommendAction(deal, benchmarks) {
+  var close = daysFromToday(deal.closeDate);
+  var ago = daysAgo(deal.lastActivityDate);
+  var contact = deal.contactName || "your primary contact";
+  var title = deal.contactTitle ? (" (" + deal.contactTitle + ")") : "";
+  var closeStr = (close !== null && close >= 0)
+    ? ("your close date is " + close + " day" + (close === 1 ? "" : "s") + " out")
+    : "the close date is approaching";
+
+  if (ago !== null && ago > 21)
+    return contact + title + " has been dark for " + ago + " days and " + closeStr +
+      ". Send a direct, personal email referencing your last conversation and propose a specific 20-minute call this week to re-engage and confirm the deal is still live.";
+
+  var bench = (benchmarks[deal.stage] !== undefined) ? benchmarks[deal.stage] : null;
+  if (deal.daysInStage !== null && bench && deal.daysInStage > bench * 1.5)
+    return "This deal has sat in " + deal.stage + " for " + deal.daysInStage + " days \u2014 well past your " +
+      bench + "-day benchmark. Get on a call with " + contact + title +
+      " to surface what's blocking progress and agree on the single next step that moves it to the following stage.";
+
+  if (deal.stakeholders === 0 || deal.stakeholders === 1)
+    return "You're single-threaded on this deal with " + closeStr + ". Ask " + contact + title +
+      " to introduce you to one more stakeholder \u2014 ideally an economic buyer or technical evaluator \u2014 so the deal isn't dependent on a single champion.";
+
+  if (deal.objections !== null && deal.objections >= 3)
+    return deal.objections + " objections are logged and unresolved with " + closeStr +
+      ". Pick the single biggest blocker, build a focused response (a reference, a security doc, a tailored ROI case), and walk " +
+      contact + title + " through it this week before it stalls the decision.";
+
+  if (deal.objections === 0 && close !== null && close >= 0 && close <= 45)
+    return "No objections are logged yet, but " + closeStr +
+      " \u2014 silence this close to a decision can signal disengagement. Run a direct \"what would stop this from closing?\" conversation with " +
+      contact + title + " to flush out hidden concerns now.";
+
+  var cap = closeStr.charAt(0).toUpperCase() + closeStr.slice(1);
+  return cap + ". Confirm next steps and a mutual close plan in writing with " + contact + title + " this week to keep momentum.";
+}
+
+function whyAtRisk(deal) {
+  if (deal.riskReasons.length)
+    return deal.riskReasons[0].charAt(0).toUpperCase() + deal.riskReasons[0].slice(1) + ".";
+  return "Multiple weak signals detected.";
+}
+
+/* ================================================================ */
+/*  Application state                                               */
+/* ================================================================ */
+var state = {
+  rawDeals: null,
+  benchmarks: Object.assign({}, DEFAULT_BENCHMARKS),
+  manualInputs: {},   // id -> {stakeholders, objections}
+  deals: null,        // scored
+  panelOpen: false,
+  sortKey: "score",
+  sortDir: "asc"
+};
+
+/* ---------- Logomark ---------- */
+function logoSVG(size) {
+  return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 40 40" aria-label="Diligent logomark">' +
+    '<rect width="40" height="40" rx="6" fill="' + RED + '"/>' +
+    '<path d="M13 10h8c6 0 10 4 10 10s-4 10-10 10h-8V10z" fill="#fff"/>' +
+    '<path d="M13 10h8c6 0 10 4 10 10H13V10z" fill="' + RED + '" opacity="0.18"/>' +
+    '</svg>';
+}
+
+/* ================================================================ */
+/*  CSV ingestion                                                   */
+/* ================================================================ */
+function showError(msg) {
+  var box = document.getElementById("empty-error");
+  box.textContent = msg;
+  box.classList.remove("hidden");
+}
+function clearError() {
+  document.getElementById("empty-error").classList.add("hidden");
+}
+
+function ingest(rows, fields) {
+  if (!rows || rows.length === 0) {
+    showError("That file parsed but contained no data rows. Check the export and try again.");
+    return;
+  }
+  var headerKeys = {};
+  fields.forEach(function (f) { var k = canonicalKey(f); if (k) headerKeys[f] = k; });
+
+  var hasName = false;
+  for (var hk in headerKeys) { if (headerKeys[hk] === "name") hasName = true; }
+  if (!hasName) {
+    showError("Couldn't find an opportunity/deal name column. Make sure your export includes a deal name.");
+    return;
+  }
+
+  var deals = [];
+  rows.forEach(function (row, i) {
+    var d = { id: "deal-" + i, name: null, stage: null, closeDate: null, daysInStage: null,
+              lastActivity: null, amount: null, contactName: null, contactTitle: null, notes: null };
+    for (var header in row) {
+      var k = headerKeys[header]; if (!k) continue;
+      var val = row[header];
+      if (k === "amount") d.amount = parseAmount(val);
+      else if (k === "daysInStage") {
+        var n = parseInt(String(val).replace(/[^\d-]/g, ""), 10);
+        d.daysInStage = isNaN(n) ? null : n;
+      } else {
+        d[k] = (val !== undefined && String(val).trim() !== "") ? String(val).trim() : null;
+      }
+    }
+    d.closeDate = parseDate(d.closeDate);
+    d.lastActivityDate = parseDate(d.lastActivity);
+    d.stage = d.stage || "Unknown";
+    if (d.name) deals.push(d);
+  });
+
+  if (deals.length === 0) {
+    showError("No rows had a usable deal name. Nothing to display.");
+    return;
+  }
+
+  clearError();
+  state.rawDeals = deals;
+  state.manualInputs = {};
+  state.panelOpen = false;
+  recomputeAndRender();
+  document.getElementById("empty-screen").classList.add("hidden");
+  document.getElementById("dashboard").classList.remove("hidden");
+}
+
+/* ================================================================ */
+/*  Recompute scored deals                                          */
+/* ================================================================ */
+function recompute() {
+  if (!state.rawDeals) { state.deals = null; return; }
+  state.deals = state.rawDeals.map(function (base) {
+    var m = state.manualInputs[base.id] || {};
+    var d = Object.assign({}, base, {
+      stakeholders: (m.stakeholders !== undefined) ? m.stakeholders : null,
+      objections: (m.objections !== undefined) ? m.objections : null
+    });
+    var sc = scoreDeal(d, state.benchmarks);
+    d.score = sc.score; d.missing = sc.missing; d.partial = sc.partial;
+    var risk = evaluateRisk(d, state.benchmarks);
+    d.atRisk = risk.atRisk; d.riskReasons = risk.reasons;
+    return d;
+  });
+}
+
+/* ================================================================ */
+/*  Derived data                                                    */
+/* ================================================================ */
+function getSummary() {
+  var deals = state.deals;
+  var totalValue = 0, weighted = 0, closing30 = 0;
+  deals.forEach(function (d) {
+    totalValue += d.amount || 0;
+    if (d.amount && d.score) weighted += (d.amount * d.score) / 10;
+    var c = daysFromToday(d.closeDate);
+    if (c !== null && c >= 0 && c <= 30) closing30++;
+  });
+  return { totalValue: totalValue, count: deals.length, weighted: weighted, closing30: closing30 };
+}
+
+function getStageChart() {
+  var map = {};
+  state.deals.forEach(function (d) {
+    var s = d.stage || "Unknown";
+    if (!map[s]) map[s] = { stage: s, count: 0, value: 0, daysSum: 0, daysN: 0 };
+    map[s].count++; map[s].value += d.amount || 0;
+    if (d.daysInStage !== null) { map[s].daysSum += d.daysInStage; map[s].daysN++; }
+  });
+  return Object.keys(map).map(function (k) {
+    var row = map[k];
+    var avgDays = row.daysN ? Math.round(row.daysSum / row.daysN) : null;
+    var bench = (state.benchmarks[row.stage] !== undefined) ? state.benchmarks[row.stage] : null;
+    var overBench = avgDays !== null && bench !== null && avgDays > bench;
+    return { stage: row.stage, count: row.count, value: row.value, avgDays: avgDays, bench: bench, overBench: overBench };
+  });
+}
+
+function getSortedDeals() {
+  var arr = state.deals.slice();
+  var dir = state.sortDir === "asc" ? 1 : -1;
+  var key = state.sortKey;
+  function get(d) {
+    switch (key) {
+      case "name": return (d.name || "").toLowerCase();
+      case "stage": return (d.stage || "").toLowerCase();
+      case "closeDate": return d.closeDate ? d.closeDate.getTime() : Infinity;
+      case "daysInStage": return d.daysInStage !== null ? d.daysInStage : Infinity;
+      case "lastActivity": return d.lastActivityDate ? d.lastActivityDate.getTime() : -Infinity;
+      case "score": return d.score !== null ? d.score : -1;
+      case "risk": return d.atRisk ? 1 : 0;
+      default: return 0;
+    }
+  }
+  arr.sort(function (a, b) {
+    var av = get(a), bv = get(b);
+    if (av < bv) return -1 * dir;
+    if (av > bv) return 1 * dir;
+    return 0;
+  });
+  return arr;
+}
+
+function getAtRiskRanked() {
+  return state.deals.filter(function (d) { return d.atRisk; })
+    .map(function (d) {
+      var close = daysFromToday(d.closeDate);
+      var proximity = close === null ? 999 : Math.max(close, 0);
+      var riskScore = (d.score || 0) + proximity / 30;
+      return Object.assign({}, d, { riskScore: riskScore });
+    })
+    .sort(function (a, b) { return a.riskScore - b.riskScore; })
+    .slice(0, 5);
+}
+
+function getClosing30() {
+  return state.deals.map(function (d) {
+      return Object.assign({}, d, { remaining: daysFromToday(d.closeDate) });
+    })
+    .filter(function (d) { return d.remaining !== null && d.remaining >= 0 && d.remaining <= 30; })
+    .sort(function (a, b) { return a.remaining - b.remaining; });
+}
+
+/* ================================================================ */
+/*  Rendering                                                       */
+/* ================================================================ */
+function scoreBadgeHTML(score) {
+  if (score === null || score === undefined) return '<span class="dash">' + DASH + '</span>';
+  var bg = GREEN;
+  if (score < 5) bg = RED; else if (score < 8) bg = AMBER;
+  return '<span class="badge" style="background:' + bg + '">' + score.toFixed(1) + '</span>';
+}
+function flagHTML(atRisk) {
+  if (!atRisk) return '<span class="flag-no">No</span>';
+  return '<span class="flag-yes">' +
+    '<svg width="13" height="15" viewBox="0 0 13 15" fill="none">' +
+    '<path d="M1 1v13" stroke="' + RED + '" stroke-width="1.6" stroke-linecap="round"/>' +
+    '<path d="M1.6 1.6h9l-2 3 2 3h-9z" fill="' + RED + '"/></svg>Yes</span>';
+}
+
+function renderMetrics() {
+  var s = getSummary();
+  var cards = [
+    { label: "Total pipeline value", value: fmtMoney(s.totalValue) },
+    { label: "Active deals", value: String(s.count) },
+    { label: "Weighted pipeline value", value: fmtMoney(s.weighted), sub: "amount × score ÷ 10" },
+    { label: "Closing within 30 days", value: String(s.closing30) }
+  ];
+  document.getElementById("metric-row").innerHTML = cards.map(function (c) {
+    return '<div class="metric-card"><div class="label">' + esc(c.label) + '</div>' +
+      '<div class="value">' + esc(c.value) + '</div>' +
+      (c.sub ? '<div class="sub">' + esc(c.sub) + '</div>' : '') + '</div>';
+  }).join("");
+}
+
+function renderBenchmarks() {
+  var grid = document.getElementById("bench-grid");
+  grid.innerHTML = Object.keys(state.benchmarks).map(function (stage) {
+    return '<label><div>' + esc(stage) + '</div>' +
+      '<input type="number" min="1" data-bench="' + esc(stage) + '" value="' + state.benchmarks[stage] + '"></label>';
+  }).join("");
+  grid.querySelectorAll("input[data-bench]").forEach(function (inp) {
+    inp.addEventListener("input", function () {
+      state.benchmarks[inp.getAttribute("data-bench")] = Number(inp.value) || 0;
+    });
+  });
+}
+
+function renderManualTable() {
+  var tbody = document.getElementById("manual-tbody");
+  tbody.innerHTML = state.rawDeals.map(function (d) {
+    var m = state.manualInputs[d.id] || {};
+    var sVal = (m.stakeholders !== undefined) ? String(m.stakeholders) : "";
+    var oVal = (m.objections !== undefined) ? String(m.objections) : "";
+    return '<tr><td class="deal-name">' + esc(d.name) + '</td>' +
+      '<td><select data-stake="' + d.id + '" style="padding:5px 8px;border:1px solid #D1D5DB;border-radius:4px;font-size:13px;">' +
+        '<option value=""' + (sVal === "" ? " selected" : "") + '>' + DASH + '</option>' +
+        '<option value="0"' + (sVal === "0" ? " selected" : "") + '>0</option>' +
+        '<option value="1"' + (sVal === "1" ? " selected" : "") + '>1</option>' +
+        '<option value="2"' + (sVal === "2" ? " selected" : "") + '>2</option>' +
+        '<option value="3"' + (sVal === "3" ? " selected" : "") + '>3+</option>' +
+      '</select></td>' +
+      '<td><input type="number" min="0" data-obj="' + d.id + '" placeholder="' + DASH + '" value="' + oVal + '" ' +
+        'style="width:70px;padding:5px 8px;border:1px solid #D1D5DB;border-radius:4px;font-size:13px;"></td></tr>';
+  }).join("");
+
+  tbody.querySelectorAll("select[data-stake]").forEach(function (sel) {
+    sel.addEventListener("change", function () {
+      var id = sel.getAttribute("data-stake");
+      if (!state.manualInputs[id]) state.manualInputs[id] = {};
+      state.manualInputs[id].stakeholders = sel.value === "" ? undefined : Number(sel.value);
+    });
+  });
+  tbody.querySelectorAll("input[data-obj]").forEach(function (inp) {
+    inp.addEventListener("input", function () {
+      var id = inp.getAttribute("data-obj");
+      if (!state.manualInputs[id]) state.manualInputs[id] = {};
+      state.manualInputs[id].objections = inp.value === "" ? undefined : Number(inp.value);
+    });
+  });
+}
+
+function renderChart() {
+  var data = getStageChart();
+  var maxCount = Math.max.apply(null, data.map(function (r) { return r.count; }).concat([1]));
+  var rows = data.map(function (r) {
+    var pct = Math.max(2, (r.count / maxCount) * 100);
+    var color = r.overBench ? RED : GREEN;
+    var detail = (r.count) + " deal" + (r.count === 1 ? "" : "s") + " · " + fmtMoney(r.value) +
+      " · avg " + (r.avgDays !== null ? r.avgDays : DASH) + "d in stage (benchmark " +
+      (r.bench !== null ? r.bench : DASH) + "d)";
+    return '<div class="chart-row" title="' + esc(detail) + '">' +
+      '<div class="chart-label">' + esc(r.stage) + '</div>' +
+      '<div class="chart-bar-track">' +
+        '<div class="chart-bar" style="width:' + pct + '%;background:' + color + '"></div>' +
+        '<div class="chart-detail">' + esc(detail) + '</div>' +
+      '</div>' +
+      '<div class="chart-count">' + r.count + ' deal' + (r.count === 1 ? "" : "s") + '</div>' +
+    '</div>';
+  }).join("");
+
+  var legend = '<div class="chart-legend">' +
+    '<span class="legend-item"><span class="legend-swatch" style="background:' + GREEN + '"></span>Avg days at or under benchmark</span>' +
+    '<span class="legend-item"><span class="legend-swatch" style="background:' + RED + '"></span>Avg days over benchmark</span>' +
+    '<span class="legend-item" style="margin-left:auto;">Hover a bar for value &amp; timing detail</span>' +
+    '</div>';
+
+  document.getElementById("chart-card").innerHTML = rows + legend;
+}
+
+function renderScoreTable() {
+  var cols = [
+    { key: "name", label: "Deal" },
+    { key: "stage", label: "Stage" },
+    { key: "closeDate", label: "Close date" },
+    { key: "daysInStage", label: "Days in stage" },
+    { key: "lastActivity", label: "Last activity" },
+    { key: "score", label: "Score" },
+    { key: "risk", label: "At risk" }
+  ];
+  var arrow = function (key) {
+    return state.sortKey === key ? (state.sortDir === "asc" ? " \u25B2" : " \u25BC") : "";
+  };
+  document.getElementById("score-head").innerHTML = cols.map(function (c) {
+    return '<th class="sortable" data-sort="' + c.key + '">' + esc(c.label) + arrow(c.key) + '</th>';
+  }).join("");
+
+  document.getElementById("score-tbody").innerHTML = getSortedDeals().map(function (d) {
+    var partial = "";
+    if (d.partial) {
+      var miss = d.missing.map(function (m) { return SIGNAL_LABEL[m]; }).join(", ");
+      partial = '<span class="partial-tag" title="Partial score — missing: ' + esc(miss) + '">partial</span>';
+    }
+    return '<tr>' +
+      '<td class="deal-name">' + esc(d.name) + partial + '</td>' +
+      '<td>' + esc(d.stage) + '</td>' +
+      '<td>' + fmtDate(d.closeDate) + '</td>' +
+      '<td>' + (d.daysInStage !== null ? d.daysInStage : DASH) + '</td>' +
+      '<td>' + fmtDate(d.lastActivityDate) + '</td>' +
+      '<td>' + scoreBadgeHTML(d.score) + '</td>' +
+      '<td>' + flagHTML(d.atRisk) + '</td>' +
+    '</tr>';
+  }).join("");
+
+  document.getElementById("score-head").querySelectorAll("th[data-sort]").forEach(function (th) {
+    th.addEventListener("click", function () {
+      var key = th.getAttribute("data-sort");
+      if (state.sortKey === key) state.sortDir = state.sortDir === "asc" ? "desc" : "asc";
+      else { state.sortKey = key; state.sortDir = (key === "score" || key === "name" || key === "stage") ? "asc" : "desc"; }
+      renderScoreTable();
+    });
+  });
+}
+
+function renderAtRisk() {
+  var ranked = getAtRiskRanked();
+  var body = document.getElementById("risk-body");
+  if (ranked.length === 0) {
+    body.innerHTML = '<div class="empty-note">No deals are currently flagged at risk. Add stakeholder and objection inputs above to sharpen the signal.</div>';
+    return;
+  }
+  body.innerHTML = ranked.map(function (d) {
+    return '<div class="risk-item">' +
+      '<div class="risk-top">' +
+        '<div class="risk-name">' + esc(d.name) +
+          '<span class="risk-meta">' + esc(d.stage) + ' · closes ' + fmtDate(d.closeDate) + '</span></div>' +
+        scoreBadgeHTML(d.score) +
+      '</div>' +
+      '<div class="risk-why">Why at risk: <span>' + esc(whyAtRisk(d)) + '</span></div>' +
+      '<div class="risk-action"><b>This week\'s action: </b>' + esc(recommendAction(d, state.benchmarks)) + '</div>' +
+    '</div>';
+  }).join("");
+}
+
+function renderClosing() {
+  var list = getClosing30();
+  var card = document.getElementById("closing-card");
+  if (list.length === 0) {
+    card.innerHTML = '<div class="empty-note">No deals have a close date in the next 30 days.</div>';
+    return;
+  }
+  var rows = list.map(function (d) {
+    var remColor = d.remaining <= 7 ? RED : CHARCOAL;
+    var remWeight = d.remaining <= 7 ? "600" : "400";
+    var contact = d.contactName ? esc(d.contactName) : DASH;
+    var title = d.contactTitle ? ' <span style="color:#9CA3AF;">· ' + esc(d.contactTitle) + '</span>' : "";
+    return '<tr>' +
+      '<td class="deal-name">' + esc(d.name) + '</td>' +
+      '<td>' + fmtDate(d.closeDate) + '</td>' +
+      '<td><span style="color:' + remColor + ';font-weight:' + remWeight + ';">' + d.remaining + 'd</span></td>' +
+      '<td>' + scoreBadgeHTML(d.score) + '</td>' +
+      '<td>' + contact + title + '</td>' +
+    '</tr>';
+  }).join("");
+  card.innerHTML = '<table style="min-width:720px;"><thead><tr>' +
+    '<th>Deal</th><th>Close date</th><th>Days left</th><th>Score</th><th>Contact</th>' +
+    '</tr></thead><tbody>' + rows + '</tbody></table>';
+}
+
+function recomputeAndRender() {
+  recompute();
+  renderMetrics();
+  renderBenchmarks();
+  renderManualTable();
+  renderChart();
+  renderScoreTable();
+  renderAtRisk();
+  renderClosing();
+}
+
+/* ================================================================ */
+/*  Wiring                                                          */
+/* ================================================================ */
+document.getElementById("empty-logo").innerHTML = logoSVG(44);
+document.getElementById("header-logo").innerHTML = logoSVG(34);
+
+document.getElementById("upload-btn").addEventListener("click", function () {
+  document.getElementById("file-input").click();
+});
+document.getElementById("file-input").addEventListener("change", function (e) {
+  var file = e.target.files && e.target.files[0];
+  if (!file) return;
+  Papa.parse(file, {
+    header: true, skipEmptyLines: true,
+    complete: function (res) {
+      if (res.errors && res.errors.length && res.data.length === 0) {
+        showError("Couldn't parse that CSV: " + res.errors[0].message); return;
+      }
+      ingest(res.data, res.meta.fields || []);
+    },
+    error: function (err) { showError("Couldn't read that file: " + err.message); }
+  });
+});
+
+document.getElementById("paste-toggle").addEventListener("click", function () {
+  var block = document.getElementById("paste-block");
+  var hidden = block.classList.toggle("hidden");
+  this.textContent = hidden ? "or paste CSV text instead" : "Hide paste option";
+});
+document.getElementById("paste-load").addEventListener("click", function () {
+  var txt = document.getElementById("paste-text").value.trim();
+  if (!txt) { showError("Paste some CSV text first, then load it."); return; }
+  var res = Papa.parse(txt, { header: true, skipEmptyLines: true });
+  if (res.errors && res.errors.length && res.data.length === 0) {
+    showError("Couldn't parse that text: " + res.errors[0].message); return;
+  }
+  ingest(res.data, res.meta.fields || []);
+});
+
+document.getElementById("panel-toggle").addEventListener("click", function () {
+  state.panelOpen = !state.panelOpen;
+  document.getElementById("panel-body").classList.toggle("hidden", !state.panelOpen);
+  document.getElementById("panel-chev").textContent = state.panelOpen ? "Hide ▲" : "Edit ▼";
+});
+document.getElementById("update-scores").addEventListener("click", function () {
+  recomputeAndRender();
+});
+
+document.getElementById("reset-btn").addEventListener("click", function () {
+  state.rawDeals = null; state.deals = null; state.manualInputs = {};
+  state.panelOpen = false;
+  document.getElementById("paste-text").value = "";
+  document.getElementById("paste-block").classList.add("hidden");
+  document.getElementById("paste-toggle").textContent = "or paste CSV text instead";
+  clearError();
+  document.getElementById("dashboard").classList.add("hidden");
+  document.getElementById("empty-screen").classList.remove("hidden");
+});
+</script>
+</body>
+</html>
