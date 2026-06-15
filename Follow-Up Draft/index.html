@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Diligent — Follow-Up Email Agent</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  /* ── Diligent brand tokens ─────────────────────────────────────── */
+  :root {
+    --red: #E3000F;
+    --charcoal: #1A1A1A;
+    --purple: #7B2D8B;
+    --grey-bg: #F5F5F5;
+    --border: #e2e2e2;
+    --muted: #9a9a9a;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--grey-bg);
+    color: var(--charcoal);
+    font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 672px; margin: 0 auto; padding: 32px 20px; }
+
+  /* Header */
+  header { display: flex; align-items: center; gap: 12px; margin-bottom: 28px; }
+  .brand-name { font-size: 24px; font-weight: 700; line-height: 1; letter-spacing: -0.02em; }
+  .brand-tag { margin-top: 5px; font-size: 14px; color: #6b6b6b; }
+
+  /* Cards */
+  .card {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  }
+  .card + .card { margin-top: 24px; }
+
+  /* Form layout */
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .row + .row, .field + .field, .row + .field, .field + .row { margin-top: 16px; }
+  @media (max-width: 560px) { .row { grid-template-columns: 1fr; } }
+
+  label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+  label .opt { font-weight: 400; color: var(--muted); }
+  .req { color: var(--red); }
+
+  input, select, textarea {
+    width: 100%;
+    border: 1px solid var(--border);
+    background: #fff;
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-size: 14px;
+    font-family: inherit;
+    color: var(--charcoal);
+    outline: none;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  input:focus, select:focus, textarea:focus {
+    border-color: var(--red);
+    box-shadow: 0 0 0 1px var(--red);
+  }
+  textarea { resize: vertical; }
+  #transcript { min-height: 220px; }
+  #notes { min-height: 90px; }
+  select.placeholder { color: var(--muted); }
+  .invalid { border-color: var(--red) !important; }
+
+  .err { margin-top: 4px; font-size: 12px; font-weight: 500; color: var(--red); display: none; }
+  .err.show { display: block; }
+
+  /* Buttons */
+  .btn {
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: opacity .15s, background-color .15s;
+  }
+  .btn-primary {
+    width: 100%;
+    margin-top: 24px;
+    padding: 14px;
+    background: var(--red);
+    color: #fff;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .btn-primary:disabled { opacity: .8; cursor: default; }
+
+  .api-error { margin-top: 12px; font-size: 14px; font-weight: 500; color: var(--red); display: none; }
+  .api-error.show { display: block; }
+
+  /* Output */
+  #output { display: none; }
+  .eyebrow { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-bottom: 4px; }
+  .subject { font-size: 16px; font-weight: 600; margin-bottom: 20px; }
+  .email-body { white-space: pre-wrap; font-size: 14px; line-height: 1.65; }
+
+  .why {
+    margin-top: 24px;
+    padding: 16px;
+    background: #faf6fb;
+    border: 1px solid rgba(123,45,139,0.13);
+    border-radius: 8px;
+  }
+  .why-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--purple); margin-bottom: 8px; }
+  .why ul { margin: 0; padding: 0; list-style: none; }
+  .why li { display: flex; gap: 8px; font-size: 14px; line-height: 1.4; }
+  .why li + li { margin-top: 8px; }
+  .why .dot { color: var(--purple); }
+
+  .out-actions { display: flex; gap: 12px; margin-top: 20px; }
+  .btn-copy { flex: 1; padding: 10px; background: var(--red); color: #fff; }
+  .btn-copy.copied { background: var(--purple); }
+  .btn-secondary { flex: 1; padding: 10px; background: #fff; border: 1px solid var(--charcoal); color: var(--charcoal); }
+  .btn-secondary:disabled { opacity: .6; cursor: default; }
+
+  /* Spinner */
+  .spinner { width: 16px; height: 16px; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <!-- Header -->
+    <header>
+      <svg width="40" height="40" viewBox="0 0 40 40" aria-label="Diligent">
+        <rect width="40" height="40" rx="7" fill="#E3000F" />
+        <path d="M13 11h7.5c5 0 8.5 3.6 8.5 9s-3.5 9-8.5 9H13V11z" fill="#fff" />
+        <path d="M17.6 11H13v18h4.6V11z" fill="#E3000F" />
+      </svg>
+      <div>
+        <div class="brand-name">Diligent</div>
+        <div class="brand-tag">Follow-Up Email Agent</div>
+      </div>
+    </header>
+
+    <!-- Form card -->
+    <div class="card">
+      <div class="row">
+        <div class="field">
+          <label>Prospect Name<span class="req"> *</span></label>
+          <input id="name" placeholder="Jane Okafor" />
+          <p class="err" id="err-name">Prospect name is required.</p>
+        </div>
+        <div class="field">
+          <label>Title<span class="req"> *</span></label>
+          <input id="title" placeholder="General Counsel" />
+          <p class="err" id="err-title">Title is required.</p>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="field">
+          <label>Company Name<span class="req"> *</span></label>
+          <input id="company" placeholder="Meridian Holdings" />
+          <p class="err" id="err-company">Company name is required.</p>
+        </div>
+        <div class="field">
+          <label>Call Type<span class="req"> *</span></label>
+          <select id="callType" class="placeholder">
+            <option value="" disabled selected>Select call type...</option>
+            <option value="Cold Call">Cold Call</option>
+            <option value="Discovery Call">Discovery Call</option>
+          </select>
+          <p class="err" id="err-callType">Select a call type.</p>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Call Transcript<span class="req"> *</span></label>
+        <textarea id="transcript" placeholder="Paste your Gong transcript, Outreach transcript, or manual call notes here..."></textarea>
+        <p class="err" id="err-transcript">A transcript or call notes is required.</p>
+      </div>
+
+      <div class="field">
+        <label>Additional Notes <span class="opt">(optional)</span></label>
+        <textarea id="notes" placeholder="Anything else worth knowing — recent news, ZoomInfo context, Salesforce history, trigger that originated the outreach..."></textarea>
+      </div>
+
+      <button class="btn btn-primary" id="submitBtn" onclick="onSubmit()">
+        <span id="btnLabel">Write My Follow-Up</span>
+      </button>
+      <p class="api-error" id="apiError"></p>
+    </div>
+
+    <!-- Output card -->
+    <div class="card" id="output">
+      <div class="eyebrow">Subject</div>
+      <div class="subject" id="outSubject"></div>
+
+      <div class="eyebrow">Email</div>
+      <div class="email-body" id="outBody"></div>
+
+      <div class="why">
+        <div class="why-title">Why this works</div>
+        <ul id="outWhy"></ul>
+      </div>
+
+      <div class="out-actions">
+        <button class="btn btn-copy" id="copyBtn" onclick="copyEmail()">Copy Email</button>
+        <button class="btn btn-secondary" id="regenBtn" onclick="onSubmit()">Try Another Version</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+  // ── System prompt (kept for reference / real backend use) ──────────────
+  // This is the prompt a real backend would send to claude-sonnet-4-6. It is
+  // not used in demo mode but is preserved so the live version stays on-brand.
+  var SYSTEM_PROMPT = [
+    "You write follow-up emails for a Diligent BDR selling the Board & Leadership",
+    "Collaboration platform to legal buyers (GC, Corporate Secretary, CLO, Paralegal).",
+    "RULES: under 120 words; reference exactly 2 specific things the prospect said;",
+    "address the biggest UNSPOKEN concern without naming it; end with one low-friction",
+    "next step; never open with 'Great speaking with you' / 'I wanted to follow up' /",
+    "'Just circling back'; no corporate language or feature dumps; specific non-generic",
+    "subject line; no full recap. Ground language in Diligent pain points (manual board",
+    "book creation, insecure email, day-of-prep, director liability, no real-time risk",
+    "view) and GovernAI features (Smart Book Builder, Risk Scanner, Smart Prep, Smart",
+    "Minutes, Smart News) — only when they map to what the prospect said."
+  ].join(" ");
+
+  var currentResult = null;
+
+  // ── Helpers ────────────────────────────────────────────────────────────
+  function val(id) { return document.getElementById(id).value.trim(); }
+
+  function setError(id, show) {
+    document.getElementById("err-" + id).classList.toggle("show", show);
+    var input = document.getElementById(id);
+    if (input) input.classList.toggle("invalid", show);
+  }
+
+  function validate() {
+    var fields = ["name", "title", "company", "callType", "transcript"];
+    var ok = true;
+    fields.forEach(function (f) {
+      var empty = val(f) === "";
+      setError(f, empty);
+      if (empty) ok = false;
+    });
+    return ok;
+  }
+
+  // Keep the dropdown's muted placeholder colour only while unselected
+  document.getElementById("callType").addEventListener("change", function () {
+    this.classList.toggle("placeholder", this.value === "");
+  });
+
+  // ── Submit / generate ────────────────────────────────────────────────
+  async function onSubmit() {
+    if (!validate()) return;
+
+    var btn = document.getElementById("submitBtn");
+    var regen = document.getElementById("regenBtn");
+    var label = document.getElementById("btnLabel");
+    var apiError = document.getElementById("apiError");
+
+    apiError.classList.remove("show");
+    btn.disabled = true;
+    regen.disabled = true;
+    label.innerHTML =
+      '<svg class="spinner" width="16" height="16" viewBox="0 0 24 24" fill="none">' +
+      '<circle cx="12" cy="12" r="10" stroke="#fff" stroke-opacity="0.3" stroke-width="3"/>' +
+      '<path d="M22 12a10 10 0 0 0-10-10" stroke="#fff" stroke-width="3" stroke-linecap="round"/>' +
+      '</svg>Writing your follow-up...';
+
+    try {
+      var result = await generateFollowUp({
+        name: val("name"),
+        title: val("title"),
+        company: val("company"),
+        callType: val("callType"),
+        transcript: val("transcript"),
+        notes: val("notes")
+      });
+      currentResult = result;
+      renderOutput(result);
+    } catch (e) {
+      apiError.textContent =
+        "Something went wrong generating the email. Try again.";
+      apiError.classList.add("show");
+    } finally {
+      btn.disabled = false;
+      regen.disabled = false;
+      label.textContent = "Write My Follow-Up";
+    }
+  }
+
+  // ── DEMO GENERATOR ──────────────────────────────────────────────────────
+  // ⚠️ PLACEHOLDER — NOT A REAL AI CALL.
+  // GitHub Pages is static hosting and cannot safely make authenticated
+  // Anthropic API calls (a key in this file would be public). This function
+  // composes a plausible, on-brand sample email from the form inputs so the
+  // UI is fully demonstrable.
+  //
+  // TO GO LIVE: stand up a small backend (e.g. a serverless function) that
+  // holds ANTHROPIC_API_KEY server-side and POSTs to
+  // https://api.anthropic.com/v1/messages with model "claude-sonnet-4-6",
+  // max_tokens 1500, system: SYSTEM_PROMPT. Then replace the body of this
+  // function with a fetch to YOUR endpoint and parse the JSON it returns.
+  function generateFollowUp(input) {
+    return new Promise(function (resolve) {
+      setTimeout(function () {
+        var firstName = input.name.split(" ")[0] || input.name;
+
+        // Pull two short snippets from the transcript to echo back, so the
+        // demo visibly "references what they said."
+        var snippets = extractSnippets(input.transcript);
+        var s1 = snippets[0];
+        var s2 = snippets[1];
+
+        var early = input.callType === "Cold Call";
+        var nextStep = early
+          ? "Worth 20 minutes next week so I can show you exactly how it'd map to your process?"
+          : "Want me to put together a short walkthrough tailored to " + input.company + "'s setup?";
+
+        var body =
+          "Hi " + firstName + ",\n\n" +
+          "The part about " + s1 + " stuck with me — that's almost always where the real time goes. " +
+          "And what you said about " + s2 + " is exactly the kind of thing we built around: keeping it secure without adding steps.\n\n" +
+          "No need to overhaul anything to see if it fits. " + nextStep + "\n\n" +
+          "Best,\nYour name";
+
+        resolve({
+          subject: snippetSubject(s1, input.company),
+          body: body,
+          why: [
+            "References two specifics from the call — \u201c" + s1 + "\u201d and \u201c" + s2 +
+              "\u201d — so it reads as a continuation, not a recap.",
+            "Neutralizes status-quo / switching hesitation by framing it as low-effort (\u201cno need to overhaul anything\u201d) rather than a rip-and-replace.",
+            "Ends with one low-friction next step suited to " +
+              (early ? "an early cold-call stage — a short, specific time ask." : "a discovery stage — a tailored walkthrough they can easily say yes to.")
+          ]
+        });
+      }, 700); // mimic network latency
+    });
+  }
+
+  // Grab two readable fragments from the transcript for the demo to echo.
+  function extractSnippets(text) {
+    var clean = text.replace(/\s+/g, " ").trim();
+    var sentences = clean.split(/(?<=[.!?])\s+/).filter(function (s) {
+      return s.split(" ").length >= 4;
+    });
+    function trim(s) {
+      if (!s) return "your current process";
+      var words = s.replace(/[".]+$/g, "").split(" ").slice(0, 9).join(" ");
+      return words.charAt(0).toLowerCase() + words.slice(1);
+    }
+    return [
+      trim(sentences[0]),
+      trim(sentences[1] || sentences[0]) || "the manual prep work"
+    ];
+  }
+
+  function snippetSubject(s1, company) {
+    var words = s1.split(" ").slice(0, 5).join(" ");
+    return "On " + words + " — quick thought";
+  }
+
+  // ── Render ───────────────────────────────────────────────────────────
+  function renderOutput(r) {
+    document.getElementById("outSubject").textContent = r.subject;
+    document.getElementById("outBody").textContent = r.body;
+    var ul = document.getElementById("outWhy");
+    ul.innerHTML = "";
+    (r.why || []).forEach(function (w) {
+      var li = document.createElement("li");
+      li.innerHTML = '<span class="dot">\u2022</span><span></span>';
+      li.querySelector("span:last-child").textContent = w;
+      ul.appendChild(li);
+    });
+    document.getElementById("output").style.display = "block";
+  }
+
+  // ── Copy ──────────────────────────────────────────────────────────────
+  function copyEmail() {
+    if (!currentResult) return;
+    var txt = "Subject: " + currentResult.subject + "\n\n" + currentResult.body;
+    var ta = document.createElement("textarea");
+    ta.value = txt;
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand("copy"); } catch (e) {}
+    document.body.removeChild(ta);
+
+    var btn = document.getElementById("copyBtn");
+    btn.textContent = "Copied!";
+    btn.classList.add("copied");
+    setTimeout(function () {
+      btn.textContent = "Copy Email";
+      btn.classList.remove("copied");
+    }, 2000);
+  }
+</script>
+</body>
+</html>
